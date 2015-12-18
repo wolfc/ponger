@@ -2,12 +2,16 @@
 #include <plugin.h>
 #include <version.h>
 
-#include <string.h>
+#include <regex.h>
+
+#define REGEX "(^| )ping"
 
 #define REPLY "Please state the nature of your emergency."
 
+static regex_t preg;
+
 static void received_any_msg(PurpleAccount *account, char *sender, char *message, PurpleConversation *conv, PurpleMessageFlags flags) {
-    if (!strstr(message, "ping"))
+    if (regexec(&preg, message, 0, NULL, 0) != 0)
         return;
 
     if (purple_conversation_get_type(conv) == PURPLE_CONV_TYPE_CHAT) {
@@ -18,7 +22,14 @@ static void received_any_msg(PurpleAccount *account, char *sender, char *message
 }
 
 static gboolean plugin_load(PurplePlugin *plugin) {
+    char errbuf[1024];
+    int status = regcomp(&preg, REGEX, REG_EXTENDED | REG_NOSUB);
     void *conv_handle = purple_conversations_get_handle();
+    if (status != 0) {
+        regerror(status, &preg, errbuf, sizeof(errbuf));
+        fprintf(stderr, "regcomp: %s\n", errbuf);
+        return FALSE;
+    }
     purple_signal_connect(conv_handle, "received-im-msg", plugin, PURPLE_CALLBACK(received_any_msg), NULL);
     purple_signal_connect(conv_handle, "received-chat-msg", plugin, PURPLE_CALLBACK(received_any_msg), NULL);
     return TRUE;
@@ -28,6 +39,7 @@ static gboolean plugin_unload(PurplePlugin *plugin) {
     void *conv_handle = purple_conversations_get_handle();
     purple_signal_disconnect(conv_handle, "received-im-msg", plugin, PURPLE_CALLBACK(received_any_msg));
     purple_signal_disconnect(conv_handle, "received-chat-msg", plugin, PURPLE_CALLBACK(received_any_msg));
+    regfree(&preg);
     return TRUE;
 }
 
